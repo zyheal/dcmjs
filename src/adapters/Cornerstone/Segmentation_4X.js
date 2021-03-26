@@ -1333,6 +1333,20 @@ function getImageIdOfReferencedFrame(
             return;
         }
 
+        // for wadors imageId
+        // imageId e.g.:
+        // "wadors:/dicom-web/studies/1.3.46.670589.11.78173.5.0.21816.2020040914095897053/series/1.3.46.670589.11.78173.5.0.7556.2020040914103777091/instances/1.3.46.670589.11.78173.5.20.1.1.7556.2020040914103777091/frames/1"
+        //
+        // frameNumber is 1 indexed
+        if (imageId.includes("wadors")) {
+            const imageIdFrameNumber = Number(imageId.split("frames/")[1]);
+
+            return (
+                sopCommonModule.sopInstanceUID === sopInstanceUid &&
+                imageIdFrameNumber === frameNumber
+            );
+        }
+
         const imageIdFrameNumber = Number(imageId.split("frame=")[1]);
 
         return (
