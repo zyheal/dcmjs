@@ -51,7 +51,8 @@ const generateSegmentationDefaultOptions = {
  * @returns {Blob}
  */
 function generateSegmentation(images, inputLabelmaps3D, userOptions = {}) {
-    const isMultiframe = images[0].imageId.includes("?frame");
+    // const isMultiframe = images[0].imageId.includes("?frame");
+    const isMultiframe = images[0].isMultiframe;
     const segmentation = _createSegFromImages(
         images,
         isMultiframe,
@@ -279,9 +280,8 @@ function generateToolState(
     dataset._meta = DicomMetaDictionary.namifyDataset(dicomData.meta);
     const multiframe = Normalizer.normalizeToDataset([dataset]);
 
-    const imagePlaneModule = metadataProvider.get(
-        "imagePlaneModule",
-        imageIds[0]
+    const imagePlaneModules = imageIds.map(imageId =>
+        metadataProvider.get("imagePlaneModule", imageId)
     );
 
     const generalSeriesModule = metadataProvider.get(
@@ -295,23 +295,29 @@ function generateToolState(
         "Note the cornerstoneTools 4.0 currently assumes the labelmaps are non-overlapping. Overlapping segments will allocate incorrectly. Feel free to submit a PR to improve this behaviour!"
     );
 
-    if (!imagePlaneModule) {
+    if (!imagePlaneModules[0]) {
         console.warn("Insufficient metadata, imagePlaneModule missing.");
     }
 
-    const ImageOrientationPatient = Array.isArray(imagePlaneModule.rowCosines)
-        ? [...imagePlaneModule.rowCosines, ...imagePlaneModule.columnCosines]
-        : [
-              imagePlaneModule.rowCosines.x,
-              imagePlaneModule.rowCosines.y,
-              imagePlaneModule.rowCosines.z,
-              imagePlaneModule.columnCosines.x,
-              imagePlaneModule.columnCosines.y,
-              imagePlaneModule.columnCosines.z
-          ];
-
+    var ImageOrientationPatients = imagePlaneModules.map(imagePlaneModule =>
+        Array.isArray(imagePlaneModule.rowCosines)
+            ? [
+                  ...imagePlaneModule.rowCosines,
+                  ...imagePlaneModule.columnCosines
+              ]
+            : [
+                  imagePlaneModule.rowCosines.x,
+                  imagePlaneModule.rowCosines.y,
+                  imagePlaneModule.rowCosines.z,
+                  imagePlaneModule.columnCosines.x,
+                  imagePlaneModule.columnCosines.y,
+                  imagePlaneModule.columnCosines.z
+              ]
+    );
     // Get IOP from ref series, compute supported orientations:
-    const validOrientations = getValidOrientations(ImageOrientationPatient);
+    const validOrientationsList = ImageOrientationPatients.map(
+        ImageOrientationPatient => getValidOrientations(ImageOrientationPatient)
+    );
 
     const sliceLength = multiframe.Columns * multiframe.Rows;
     const segMetadata = getSegmentMetadata(multiframe, SeriesInstanceUID);
@@ -344,44 +350,64 @@ function generateToolState(
         }
     }
 
-    const orientation = checkOrientation(multiframe, validOrientations, [
-        imagePlaneModule.rows,
-        imagePlaneModule.columns,
+    const orientations = checkOrientation(
+        multiframe,
+        validOrientationsList,
+        imagePlaneModules,
         imageIds.length
-    ]);
+    );
 
+    // TODO:
     let overlapping = false;
     if (!skipOverlapping) {
         overlapping = checkSEGsOverlapping(
             pixelData,
             multiframe,
             imageIds,
-            validOrientations,
+            validOrientationsList[0],
             metadataProvider
         );
     }
 
     let insertFunction;
-
-    switch (orientation) {
-        case "Planar":
-            if (overlapping) {
-                insertFunction = insertOverlappingPixelDataPlanar;
-            } else {
-                insertFunction = insertPixelDataPlanar;
-            }
-            break;
-        case "Perpendicular":
-            //insertFunction = insertPixelDataPerpendicular;
-            throw new Error(
-                "Segmentations orthogonal to the acquisition plane of the source data are not yet supported."
-            );
-            break;
-        case "Oblique":
-            throw new Error(
-                "Segmentations oblique to the acquisition plane of the source data are not yet supported."
-            );
+    if (orientations.includes("Perpendicular")) {
+        //insertFunction = insertPixelDataPerpendicular;
+        throw new Error(
+            "Segmentations orthogonal to the acquisition plane of the source data are not yet supported."
+        );
     }
+    if (orientations.includes("Oblique")) {
+        throw new Error(
+            "Segmentations oblique to the acquisition plane of the source data are not yet supported."
+        );
+    }
+    if (orientations.every(orientation => orientation === "Planar")) {
+        if (overlapping) {
+            insertFunction = insertOverlappingPixelDataPlanar;
+        } else {
+            insertFunction = insertPixelDataPlanar;
+        }
+    }
+
+    //switch (orientation) {
+    //    case "Planar":
+    //        if (overlapping) {
+    //            insertFunction = insertOverlappingPixelDataPlanar;
+    //        } else {
+    //            insertFunction = insertPixelDataPlanar;
+    //        }
+    //        break;
+    //    case "Perpendicular":
+    //        //insertFunction = insertPixelDataPerpendicular;
+    //        throw new Error(
+    //            "Segmentations orthogonal to the acquisition plane of the source data are not yet supported."
+    //        );
+    //        break;
+    //    case "Oblique":
+    //        throw new Error(
+    //            "Segmentations oblique to the acquisition plane of the source data are not yet supported."
+    //        );
+    //}
 
     /* if SEGs are overlapping:
     1) the labelmapBuffer will contain M volumes which have non-overlapping segments;
@@ -404,7 +430,7 @@ function generateToolState(
         pixelData,
         multiframe,
         imageIds,
-        validOrientations,
+        validOrientationsList,
         metadataProvider
     );
 
@@ -667,6 +693,11 @@ function checkSEGsOverlapping(
     while (i < groupsLen) {
         const PerFrameFunctionalGroups = PerFrameFunctionalGroupsSequence[i];
 
+        var index =
+            PerFrameFunctionalGroups.DerivationImageSequence.SourceImageSequence
+                .ReferencedFrameNumber || 1;
+        index = index - 1;
+
         const ImageOrientationPatientI =
             sharedImageOrientationPatient ||
             PerFrameFunctionalGroups.PlaneOrientationSequence
@@ -680,7 +711,7 @@ function checkSEGsOverlapping(
         const alignedPixelDataI = alignPixelDataWithSourceData(
             pixelDataI2D,
             ImageOrientationPatientI,
-            validOrientations
+            validOrientationsList[index]
         );
 
         if (!alignedPixelDataI) {
@@ -982,7 +1013,7 @@ function insertPixelDataPlanar(
     pixelData,
     multiframe,
     imageIds,
-    validOrientations,
+    validOrientationsList,
     metadataProvider
 ) {
     const {
@@ -1004,6 +1035,10 @@ function insertPixelDataPlanar(
         ++i
     ) {
         const PerFrameFunctionalGroups = PerFrameFunctionalGroupsSequence[i];
+        var index =
+            PerFrameFunctionalGroups.DerivationImageSequence.SourceImageSequence
+                .ReferencedFrameNumber || 1;
+        index = index - 1;
 
         const ImageOrientationPatientI =
             sharedImageOrientationPatient ||
@@ -1018,7 +1053,7 @@ function insertPixelDataPlanar(
         const alignedPixelDataI = alignPixelDataWithSourceData(
             pixelDataI2D,
             ImageOrientationPatientI,
-            validOrientations
+            validOrientationsList[index]
         );
 
         if (!alignedPixelDataI) {
@@ -1091,43 +1126,56 @@ function insertPixelDataPlanar(
     }
 }
 
-function checkOrientation(multiframe, validOrientations, sourceDataDimensions) {
-    const {
-        SharedFunctionalGroupsSequence,
-        PerFrameFunctionalGroupsSequence
-    } = multiframe;
-
-    const sharedImageOrientationPatient = SharedFunctionalGroupsSequence.PlaneOrientationSequence
+function checkOrientation(
+    multiframe,
+    validOrientationsList,
+    imagePlaneModules,
+    length
+) {
+    var SharedFunctionalGroupsSequence =
+            multiframe.SharedFunctionalGroupsSequence,
+        PerFrameFunctionalGroupsSequence =
+            multiframe.PerFrameFunctionalGroupsSequence;
+    var sharedImageOrientationPatient = SharedFunctionalGroupsSequence.PlaneOrientationSequence
         ? SharedFunctionalGroupsSequence.PlaneOrientationSequence
               .ImageOrientationPatient
-        : undefined;
+        : undefined; // Check if in plane.
 
-    // Check if in plane.
-    const PerFrameFunctionalGroups = PerFrameFunctionalGroupsSequence[0];
+    return PerFrameFunctionalGroupsSequence.map(PerFrameFunctionalGroups => {
+        var index =
+            PerFrameFunctionalGroups.DerivationImageSequence.SourceImageSequence
+                .ReferencedFrameNumber || 1;
+        index = index - 1;
+        var validOrientations = validOrientationsList[index];
+        var sourceDataDimensions = [
+            imagePlaneModules[index].rows,
+            imagePlaneModules[index].columns,
+            length
+        ];
 
-    const iop =
-        sharedImageOrientationPatient ||
-        PerFrameFunctionalGroups.PlaneOrientationSequence
-            .ImageOrientationPatient;
+        var iop =
+            sharedImageOrientationPatient ||
+            PerFrameFunctionalGroups.PlaneOrientationSequence
+                .ImageOrientationPatient;
+        var inPlane = validOrientations.some(function(operation) {
+            return compareIOP(iop, operation);
+        });
 
-    const inPlane = validOrientations.some(operation =>
-        compareIOP(iop, operation)
-    );
+        if (inPlane) {
+            return "Planar";
+        }
 
-    if (inPlane) {
-        return "Planar";
-    }
+        if (
+            checkIfPerpendicular(iop, validOrientations[0]) &&
+            sourceDataDimensions.includes(multiframe.Rows) &&
+            sourceDataDimensions.includes(multiframe.Rows)
+        ) {
+            // Perpendicular and fits on same grid.
+            return "Perpendicular";
+        }
 
-    if (
-        checkIfPerpendicular(iop, validOrientations[0]) &&
-        sourceDataDimensions.includes(multiframe.Rows) &&
-        sourceDataDimensions.includes(multiframe.Rows)
-    ) {
-        // Perpendicular and fits on same grid.
-        return "Perpendicular";
-    }
-
-    return "Oblique";
+        return "Oblique";
+    });
 }
 
 /**

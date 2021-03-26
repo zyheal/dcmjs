@@ -201,8 +201,9 @@ class ImageNormalizer extends Normalizer {
         let frameSize = referenceDataset.PixelData.byteLength;
         ds.PixelData = new ArrayBuffer(ds.NumberOfFrames * frameSize);
         let frame = 0;
-        distanceDatasetPairs.forEach(function(pair) {
-            let dataset = pair[1];
+        // distanceDatasetPairs.forEach(function(pair) {
+        //     let dataset = pair[1];
+        this.datasets.forEach(function(dataset) {
             let pixels = new Uint16Array(dataset.PixelData);
             let frameView = new Uint16Array(
                 ds.PixelData,
@@ -262,9 +263,9 @@ class ImageNormalizer extends Normalizer {
 
         // copy over each datasets window/level into the per-frame groups
         // and set the referenced series uid
-        distanceDatasetPairs.forEach(function(pair) {
-            const dataset = pair[1];
-
+        // distanceDatasetPairs.forEach(function(pair) {
+        //     const dataset = pair[1];
+        this.datasets.forEach(function(dataset) {
             ds.PerFrameFunctionalGroupsSequence.push({
                 PlanePositionSequence: {
                     ImagePositionPatient: dataset.ImagePositionPatient

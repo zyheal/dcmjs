@@ -235,12 +235,12 @@ class DicomMetaDictionary {
             } else {
                 const validMetaNames = ["_vrMap", "_meta"];
                 if (validMetaNames.indexOf(name) == -1) {
-                    log.warn(
-                        "Unknown name in dataset",
-                        name,
-                        ":",
-                        dataset[name]
-                    );
+                    // log.warn(
+                    //     "Unknown name in dataset",
+                    //     name,
+                    //     ":",
+                    //     dataset[name]
+                    // );
                 }
             }
         });
