@@ -21,6 +21,7 @@ import cloneDeep from "lodash.clonedeep";
 
 const Segmentation = {
     generateSegmentation,
+    generateSegmentationWithDataset,
     generateToolState,
     fillSegmentation
 };
@@ -39,6 +40,19 @@ const generateSegmentationDefaultOptions = {
     includeSliceSpacing: true,
     rleEncode: true
 };
+
+/**
+ * @param {object[]} datasets the instance datasets in the target series
+ */
+function generateSegmentationWithDataset(
+    datasets,
+    inputLabelmaps3D,
+    userOptions
+) {
+    const multiframe = Normalizer.normalizeToDataset(datasets);
+    const segmentation = new SegmentationDerivation([multiframe], userOptions);
+    return fillSegmentation(segmentation, inputLabelmaps3D, userOptions);
+}
 
 /**
  * generateSegmentation - Generates cornerstoneTools brush data, given a stack of

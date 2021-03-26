@@ -3,6 +3,7 @@ import Segmentation_4X from "./Segmentation_4X";
 
 const Segmentation = {
     generateSegmentation,
+    generateSegmentationWithDataset,
     generateToolState,
     fillSegmentation
 };
@@ -42,6 +43,23 @@ function generateSegmentation(
 
     console.warn(
         `No generateSegmentation adapater for cornerstone version ${cornerstoneToolsVersion}, exiting.`
+    );
+}
+
+/**
+ *
+ * @param {object} dataset
+ * @param {object} inputLabelmaps3D cornerstone `Lablemap3D` object
+ */
+function generateSegmentationWithDataset(
+    dataset,
+    inputLabelmaps3D,
+    options = { includeSliceSpacing: true }
+) {
+    return Segmentation_4X.generateSegmentationWithDataset(
+        dataset,
+        inputLabelmaps3D,
+        options
     );
 }
 
