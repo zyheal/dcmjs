@@ -399,10 +399,10 @@ export default class Segmentation extends DerivedPixels {
 
         const SegmentAlgorithmType = Segment.SegmentAlgorithmType;
 
-        const reNumberedSegmentCopy = {
+        const segmentCopy = {
             SegmentedPropertyCategoryCodeSequence:
                 Segment.SegmentedPropertyCategoryCodeSequence,
-            SegmentNumber: (SegmentSequence.length + 1).toString(),
+            SegmentNumber: Segment.SegmentNumber.toString(),
             SegmentLabel: Segment.SegmentLabel,
             SegmentAlgorithmType,
             RecommendedDisplayCIELabValue:
@@ -415,12 +415,11 @@ export default class Segmentation extends DerivedPixels {
             SegmentAlgorithmType === "AUTOMATIC" ||
             SegmentAlgorithmType === "SEMIAUTOMATIC"
         ) {
-            reNumberedSegmentCopy.SegmentAlgorithmName =
-                Segment.SegmentAlgorithmName;
+            segmentCopy.SegmentAlgorithmName = Segment.SegmentAlgorithmName;
         }
 
-        SegmentSequence.push(reNumberedSegmentCopy);
+        SegmentSequence.push(segmentCopy);
 
-        return reNumberedSegmentCopy.SegmentNumber;
+        return segmentCopy.SegmentNumber;
     }
 }
